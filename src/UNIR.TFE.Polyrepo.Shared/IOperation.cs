@@ -6,3 +6,4 @@
         decimal Execute(decimal a, decimal b);
     }
 }
+
