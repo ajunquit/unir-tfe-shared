@@ -12,7 +12,7 @@ permissions:
 env:
   PROJECT_PATH: src/UNIR.TFE.Polyrepo.Shared/UNIR.TFE.Polyrepo.Shared.csproj
   TEST_PATH: test/UNIR.TFE.Polyrepo.Shared.Test/UNIR.TFE.Polyrepo.Shared.Test.csproj
-  BASE_VERSION: 0.0
+  BASE_VERSION: "0.0"
 
 jobs:
   publish:
