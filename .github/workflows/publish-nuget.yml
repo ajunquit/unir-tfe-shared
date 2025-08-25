@@ -66,11 +66,10 @@ jobs:
             **/TestResults/**/*.trx
             **/TestResults/**/*.xml
             
-      - name: Pack (inject VERSION)
+      - name: Pack
         run: |
-          dotnet restore $PROJECT_PATH
           dotnet pack $PROJECT_PATH -c Release -o ./artifacts \
-            /p:Version=$VERSION /p:PackageVersion=$VERSION
+            /p:Version=$PACKAGE_VERSION /p:PackageVersion=$PACKAGE_VERSION
 
       - name: Add GitHub Packages source
         run: |
