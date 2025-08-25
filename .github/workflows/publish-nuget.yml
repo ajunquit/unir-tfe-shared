@@ -9,6 +9,7 @@ permissions:
 
 env:
   PROJECT_PATH: src/UNIR.TFE.Polyrepo.Shared/UNIR.TFE.Polyrepo.Shared.csproj
+  TEST_PATH: test/UNIR.TFE.Polyrepo.Shared.Test/UNIR.TFE.Polyrepo.Shared.Test.csproj
 
 jobs:
   publish:
@@ -25,6 +26,28 @@ jobs:
       - name: Resolve version from tag (drop leading v)
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
 
+      - name: Restore
+        run: |
+          dotnet restore $PROJECT_PATH
+          dotnet restore $TEST_PATH
+
+      - name: Test (unit tests + coverage)
+        run: |
+          dotnet test $TEST_PATH -c Release \
+            --logger "trx;LogFileName=test-results.trx" \
+            --results-directory ./test-results \
+            --collect:"XPlat Code Coverage"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            ./test-results
+            **/TestResults/**/*.trx
+            **/TestResults/**/*.xml
+            
       - name: Pack (inject VERSION)
         run: |
           dotnet restore $PROJECT_PATH
