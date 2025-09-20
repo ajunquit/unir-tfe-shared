@@ -2,13 +2,13 @@ name: publish-nuget
 
 on:
   push:
-    branches: [main]
-    tags: ['v*']
-  workflow_dispatch:
+    branches: [main]       # Auto-versionado en CI
+    tags: ['v*']           # Releases estables por tag (v1.2.3)
+  workflow_dispatch:       # Para lanzar manualmente
 
 permissions:
   contents: read
-  packages: write
+  packages: write          # necesario para publicar a GitHub Packages
 
 env:
   PROJECT_PATH: src/UNIR.TFE.Polyrepo.Shared/UNIR.TFE.Polyrepo.Shared.csproj
@@ -32,10 +32,13 @@ jobs:
         shell: bash
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            # Caso 1: release estable por tag vX.Y.Z
             VERSION="${GITHUB_REF_NAME#v}"
             echo "PACKAGE_VERSION=$VERSION" >> $GITHUB_ENV
             echo "RELEASE_KIND=tag" >> $GITHUB_ENV
           else
+            # Caso 2: auto-versionado en CI (main)
+            # Resultado: X.Y.<run_number> (ej. 0.0.57)
             VERSION="${BASE_VERSION}.${GITHUB_RUN_NUMBER}"
             echo "PACKAGE_VERSION=$VERSION" >> $GITHUB_ENV
             echo "RELEASE_KIND=ci" >> $GITHUB_ENV
@@ -54,51 +57,15 @@ jobs:
             --results-directory ./test-results \
             --collect:"XPlat Code Coverage"
 
-      # Diagnóstico: asegura que realmente existan los archivos
-      - name: List test-results
-        if: always()
-        run: |
-          echo "Contenido de ./test-results:"
-          find ./test-results -type f | sort || true
-
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: ./test-results
-          if-no-files-found: error      # Falla si no existe el TRX/XML
-
-      # ==== COBERTURA + HTML ====
-      - name: Install ReportGenerator
-        run: |
-          dotnet tool install --global dotnet-reportgenerator-globaltool
-          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
-
-      - name: Generate coverage HTML + summary
-        if: always()
-        shell: bash
-        run: |
-          # Usa la ruta real donde dotnet test dejó los Cobertura XML
-          reportgenerator \
-            -reports:"./test-results/**/coverage.cobertura.xml" \
-            -targetdir:"./coverage-html" \
-            -reporttypes:"Html;HtmlSummary;Cobertura;MarkdownSummaryGithub"
-
-          # Publica resumen en el Job Summary
-          if [ -f "./coverage-html/SummaryGithub.md" ]; then
-            echo "## Code Coverage" >> "$GITHUB_STEP_SUMMARY"
-            cat "./coverage-html/SummaryGithub.md" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Upload coverage HTML artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-html
-          path: ./coverage-html
-          if-no-files-found: error      # Falla si no existe la carpeta/reportes
-      # ===========================
+          path: |
+            ./test-results
+            **/TestResults/**/*.trx
+            **/TestResults/**/*.xml
 
       - name: Pack
         run: |
