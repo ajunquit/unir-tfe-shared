@@ -3,11 +3,11 @@ on:
   push:
     branches: [main]     # Auto-versionado en CI
     tags: ['v*']         # Releases estables por tag (v1.2.3)
-  workflow_dispatch: # Para lanzar manualmente
+  workflow_dispatch:     # Para lanzar manualmente
 
 permissions:
   contents: read
-  packages: write   # necesario para publicar a GitHub Packages
+  packages: write        # necesario para publicar a GitHub Packages
 
 env:
   PROJECT_PATH: src/UNIR.TFE.Polyrepo.Shared/UNIR.TFE.Polyrepo.Shared.csproj
@@ -31,13 +31,10 @@ jobs:
         shell: bash
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            # Caso 1: release estable por tag vX.Y.Z
             VERSION="${GITHUB_REF_NAME#v}"
             echo "PACKAGE_VERSION=$VERSION" >> $GITHUB_ENV
             echo "RELEASE_KIND=tag" >> $GITHUB_ENV
           else
-            # Caso 2: auto-versionado en CI (main)
-            # Resultado: X.Y.<run_number>  (ej. 0.0.57)
             VERSION="${BASE_VERSION}.${GITHUB_RUN_NUMBER}"
             echo "PACKAGE_VERSION=$VERSION" >> $GITHUB_ENV
             echo "RELEASE_KIND=ci" >> $GITHUB_ENV
@@ -56,6 +53,26 @@ jobs:
             --results-directory ./test-results \
             --collect:"XPlat Code Coverage"
 
+      # ---- Resumen de cobertura + HTML como artefacto ----
+      - name: Generate coverage summary
+        uses: danielpalme/ReportGenerator-GitHub-Action@v5
+        with:
+          # Soporta test-results y TestResults (por si cambia la carpeta)
+          reports: 'test-results/**/coverage.cobertura.xml;**/TestResults/**/coverage.cobertura.xml'
+          targetdir: 'coveragereport'
+          reporttypes: 'MarkdownSummary;HtmlInline_AzurePipelines'
+
+      - name: Add coverage to Job Summary
+        run: |
+          echo "## Code Coverage" >> $GITHUB_STEP_SUMMARY
+          cat coveragereport/Summary.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload coverage HTML
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: coveragereport
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -64,8 +81,8 @@ jobs:
           path: |
             ./test-results
             **/TestResults/**/*.trx
-            **/TestResults/**/*.xml
-            
+            **/TestResults/**/coverage.cobertura.xml
+
       - name: Pack
         run: |
           dotnet pack $PROJECT_PATH -c Release -o ./artifacts \
