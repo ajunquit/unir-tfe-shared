@@ -1,6 +1,6 @@
 namespace UNIR.TFE.Polyrepo.Shared.Test
 {
-    public class IOperationTests
+    public class OperationTests
     {
         private class TestOperation : IOperation
         {
