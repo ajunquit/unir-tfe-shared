@@ -113,20 +113,13 @@ jobs:
           dotnet pack $PROJECT_PATH -c Release -o ./artifacts \
             /p:Version=$PACKAGE_VERSION /p:PackageVersion=$PACKAGE_VERSION
 
-      - name: Upload package artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: nuget-package
-          path: artifacts/*
-          retention-days: 14
+      - name: Add GitHub Packages source
+        run: |
+          dotnet nuget add source \
+            --username ${{ github.actor }} \
+            --password ${{ secrets.GITHUB_TOKEN }} \
+            --store-password-in-clear-text \
+            --name github "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
 
       - name: Publish to GitHub Packages
-        env:
-          NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          dotnet nuget push "./artifacts/*.nupkg" \
-            --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
-            --skip-duplicate
-          dotnet nuget push "./artifacts/*.snupkg" \
-            --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
-            --skip-duplicate
+        run: dotnet nuget push "./artifacts/*.nupkg" --source "github" --skip-duplicate
