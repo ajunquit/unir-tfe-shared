@@ -1,4 +1,5 @@
 name: publish-nuget
+
 on:
   push:
     branches: [main]
@@ -43,35 +44,42 @@ jobs:
           dotnet restore $PROJECT_PATH
           dotnet restore $TEST_PATH
 
-      # Asegura que el collector esté presente (evita reportes vacíos)
-      - name: Ensure coverlet.collector in test project
+      # --- Fichero de configuración para Coverlet Collector (incluye el assembly de Shared) ---
+      - name: Create coverlet runsettings
         run: |
-          dotnet add $TEST_PATH package coverlet.collector --version 6.0.0
-          dotnet add $TEST_PATH package Microsoft.NET.Test.Sdk --version 17.10.0
+          cat > coverlet.runsettings <<'XML'
+          <?xml version="1.0" encoding="utf-8"?>
+          <RunSettings>
+            <DataCollectionRunSettings>
+              <DataCollectors>
+                <DataCollector friendlyName="XPlat Code Coverage">
+                  <Configuration>
+                    <Format>cobertura</Format>
+                    <!-- Solo medimos la lib de producción -->
+                    <Include>[UNIR.TFE.Polyrepo.Shared*]*</Include>
+                    <ExcludeByAttribute>CompilerGeneratedAttribute,GeneratedCodeAttribute</ExcludeByAttribute>
+                  </Configuration>
+                </DataCollector>
+              </DataCollectors>
+            </DataCollectionRunSettings>
+          </RunSettings>
+          XML
+          cat coverlet.runsettings
 
       - name: Test (unit tests + coverage)
         run: |
           dotnet test $TEST_PATH -c Release \
             --logger "trx;LogFileName=test-results.trx" \
             --results-directory ./test-results \
-            --collect:"XPlat Code Coverage"
+            --settings coverlet.runsettings
 
-      # Diagnóstico: qué coverage files se generaron
-      - name: Inspect coverage files
-        run: |
-          echo "Coverage files found:"
-          find . -type f -name "coverage.cobertura.xml" -print -exec du -h {} \; || true
-          echo "Sample head:"
-          head -n 40 $(find . -type f -name "coverage.cobertura.xml" | head -n 1) || true
-
-      # Resumen de cobertura + HTML
+      # ---- Resumen de cobertura + HTML como artefacto ----
       - name: Generate coverage summary
         uses: danielpalme/ReportGenerator-GitHub-Action@v5
         with:
           reports: 'test-results/**/coverage.cobertura.xml;**/TestResults/**/coverage.cobertura.xml'
           targetdir: 'coveragereport'
           reporttypes: 'MarkdownSummary;HtmlInline_AzurePipelines'
-          # Opcional: enfoca el assembly de Shared para evitar “0 módulos” por mezclar reportes vacíos
           assemblyfilters: '+UNIR.TFE.Polyrepo.Shared*'
 
       - name: Add coverage to Job Summary
