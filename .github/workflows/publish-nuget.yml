@@ -10,10 +10,6 @@ permissions:
   contents: read
   packages: write          # necesario para publicar a GitHub Packages
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 env:
   PROJECT_PATH: src/UNIR.TFE.Polyrepo.Shared/UNIR.TFE.Polyrepo.Shared.csproj
   TEST_PATH: test/UNIR.TFE.Polyrepo.Shared.Test/UNIR.TFE.Polyrepo.Shared.Test.csproj
@@ -26,46 +22,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET + Auth to GH Packages (with cache)
+      - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.x'
-          source-url: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
-          cache: true
-          cache-dependency-path: |
-            **/*.csproj
-            **/Directory.Packages.props
-        env:
-          NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Determine package version
         id: ver
         shell: bash
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            # Caso 1: release estable por tag vX.Y.Z
             VERSION="${GITHUB_REF_NAME#v}"
+            echo "PACKAGE_VERSION=$VERSION" >> $GITHUB_ENV
             echo "RELEASE_KIND=tag" >> $GITHUB_ENV
           else
+            # Caso 2: auto-versionado en CI (main)
+            # Resultado: X.Y.<run_number> (ej. 0.0.57)
             VERSION="${BASE_VERSION}.${GITHUB_RUN_NUMBER}"
+            echo "PACKAGE_VERSION=$VERSION" >> $GITHUB_ENV
             echo "RELEASE_KIND=ci" >> $GITHUB_ENV
           fi
-          echo "PACKAGE_VERSION=$VERSION" >> $GITHUB_ENV
           echo "Version => ${VERSION}"
 
       - name: Restore
         run: |
-          dotnet restore $PROJECT_PATH \
-            --source "https://api.nuget.org/v3/index.json" \
-            --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
-          dotnet restore $TEST_PATH \
-            --source "https://api.nuget.org/v3/index.json" \
-            --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
-
-      - name: Build
-        run: |
-          dotnet build $PROJECT_PATH -c Release --no-restore \
-            /p:ContinuousIntegrationBuild=true \
-            /p:Version=$PACKAGE_VERSION
+          dotnet restore $PROJECT_PATH
+          dotnet restore $TEST_PATH
 
       - name: Test (unit tests + coverage)
         run: |
@@ -73,28 +56,6 @@ jobs:
             --logger "trx;LogFileName=test-results.trx" \
             --results-directory ./test-results \
             --collect:"XPlat Code Coverage"
-
-      # ---- Resumen de cobertura + HTML como artefacto ----
-      - name: Generate coverage summary
-        uses: danielpalme/ReportGenerator-GitHub-Action@v5
-        with:
-          # Soporta tanto carpeta 'test-results' como 'TestResults' (por si cambia)
-          reports: 'test-results/**/coverage.cobertura.xml;**/TestResults/**/coverage.cobertura.xml'
-          targetdir: 'coveragereport'
-          reporttypes: 'MarkdownSummary;HtmlInline_AzurePipelines'
-
-      - name: Add coverage to Job Summary
-        run: |
-          echo "## Code Coverage" >> $GITHUB_STEP_SUMMARY
-          cat coveragereport/Summary.md >> $GITHUB_STEP_SUMMARY
-
-      - name: Upload coverage HTML
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-html
-          path: coveragereport
-          if-no-files-found: error
-          retention-days: 30
 
       - name: Upload test results
         if: always()
@@ -104,9 +65,7 @@ jobs:
           path: |
             ./test-results
             **/TestResults/**/*.trx
-            **/TestResults/**/coverage.cobertura.xml
-          if-no-files-found: error
-          retention-days: 30
+            **/TestResults/**/*.xml
 
       - name: Pack
         run: |
