@@ -1,14 +1,15 @@
-name: publish-nuget
+name: ci-default
 
 on:
   push:
     branches: [main]
-    tags: ['v*']
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
-  packages: write
+  packages: read
 
 env:
   PROJECT_PATH: src/UNIR.TFE.Polyrepo.Shared/UNIR.TFE.Polyrepo.Shared.csproj
@@ -16,14 +17,12 @@ env:
   BASE_VERSION: "0.0"
 
 jobs:
-  publish:
+  build_test_pack:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.x'
 
@@ -32,9 +31,11 @@ jobs:
         shell: bash
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"; echo "RELEASE_KIND=tag" >> $GITHUB_ENV
+            VERSION="${GITHUB_REF_NAME#v}"
+            echo "RELEASE_KIND=tag" >> $GITHUB_ENV
           else
-            VERSION="${BASE_VERSION}.${GITHUB_RUN_NUMBER}"; echo "RELEASE_KIND=ci" >> $GITHUB_ENV
+            VERSION="${BASE_VERSION}.${GITHUB_RUN_NUMBER}"
+            echo "RELEASE_KIND=ci" >> $GITHUB_ENV
           fi
           echo "PACKAGE_VERSION=$VERSION" >> $GITHUB_ENV
           echo "Version => ${VERSION}"
@@ -44,7 +45,6 @@ jobs:
           dotnet restore $PROJECT_PATH
           dotnet restore $TEST_PATH
 
-      # --- Fichero de configuración para Coverlet Collector (incluye el assembly de Shared) ---
       - name: Create coverlet runsettings
         run: |
           cat > coverlet.runsettings <<'XML'
@@ -55,7 +55,6 @@ jobs:
                 <DataCollector friendlyName="XPlat Code Coverage">
                   <Configuration>
                     <Format>cobertura</Format>
-                    <!-- Solo medimos la lib de producción -->
                     <Include>[UNIR.TFE.Polyrepo.Shared*]*</Include>
                     <ExcludeByAttribute>CompilerGeneratedAttribute,GeneratedCodeAttribute</ExcludeByAttribute>
                   </Configuration>
@@ -64,7 +63,6 @@ jobs:
             </DataCollectionRunSettings>
           </RunSettings>
           XML
-          cat coverlet.runsettings
 
       - name: Test (unit tests + coverage)
         run: |
@@ -73,21 +71,25 @@ jobs:
             --results-directory ./test-results \
             --settings coverlet.runsettings
 
-      # ---- Resumen de cobertura + HTML como artefacto ----
+      # Cobertura → Summary + HTML
       - name: Generate coverage summary
+        if: always()
         uses: danielpalme/ReportGenerator-GitHub-Action@v5
         with:
           reports: 'test-results/**/coverage.cobertura.xml;**/TestResults/**/coverage.cobertura.xml'
           targetdir: 'coveragereport'
           reporttypes: 'MarkdownSummary;HtmlInline_AzurePipelines'
           assemblyfilters: '+UNIR.TFE.Polyrepo.Shared*'
+          title: 'UNIR.TFE.Polyrepo.Shared – Coverage'
 
       - name: Add coverage to Job Summary
+        if: always()
         run: |
           echo "## Code Coverage" >> $GITHUB_STEP_SUMMARY
           cat coveragereport/Summary.md >> $GITHUB_STEP_SUMMARY
 
       - name: Upload coverage HTML
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-html
@@ -103,18 +105,16 @@ jobs:
             **/TestResults/**/*.trx
             **/TestResults/**/coverage.cobertura.xml
 
+      # Empaquetado (no publica)
       - name: Pack
         run: |
           dotnet pack $PROJECT_PATH -c Release -o ./artifacts \
             /p:Version=$PACKAGE_VERSION /p:PackageVersion=$PACKAGE_VERSION
 
-      - name: Add GitHub Packages source
-        run: |
-          dotnet nuget add source \
-            --username ${{ github.actor }} \
-            --password ${{ secrets.GITHUB_TOKEN }} \
-            --store-password-in-clear-text \
-            --name github "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
-
-      - name: Publish to GitHub Packages
-        run: dotnet nuget push "./artifacts/*.nupkg" --source "github" --skip-duplicate
+      # Publica el paquete como artefacto para CD
+      - name: Upload NuGet package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-package
+          path: artifacts/*.nupkg
+          if-no-files-found: error
