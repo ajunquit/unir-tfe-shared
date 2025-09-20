@@ -74,29 +74,19 @@ jobs:
             --results-directory ./test-results \
             --collect:"XPlat Code Coverage"
 
-      - name: Test Summary (TRX → Job Summary)
-        uses: dorny/test-reporter@v1
-        if: always()
-        with:
-          name: Unit Tests
-          path: ./test-results/*.trx
-          reporter: dotnet-trx
-          fail-on-errors: true
-
       # ---- Resumen de cobertura + HTML como artefacto ----
       - name: Generate coverage summary
         uses: danielpalme/ReportGenerator-GitHub-Action@v5
         with:
+          # Soporta tanto carpeta 'test-results' como 'TestResults' (por si cambia)
           reports: 'test-results/**/coverage.cobertura.xml;**/TestResults/**/coverage.cobertura.xml'
           targetdir: 'coveragereport'
-          reporttypes: 'MarkdownSummaryGithub;HtmlInline_AzurePipelines'
-          assemblyfilters: '+UNIR.TFE.*;-*.Test'
+          reporttypes: 'MarkdownSummary;HtmlInline_AzurePipelines'
 
       - name: Add coverage to Job Summary
-        if: ${{ hashFiles('coveragereport/SummaryGithub.md') != '' }}
         run: |
           echo "## Code Coverage" >> $GITHUB_STEP_SUMMARY
-          cat coveragereport/SummaryGithub.md >> $GITHUB_STEP_SUMMARY
+          cat coveragereport/Summary.md >> $GITHUB_STEP_SUMMARY
 
       - name: Upload coverage HTML
         uses: actions/upload-artifact@v4
@@ -106,7 +96,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Upload test results (TRX + cobertura)
+      - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -120,12 +110,8 @@ jobs:
 
       - name: Pack
         run: |
-          dotnet pack $PROJECT_PATH -c Release -o ./artifacts --no-build \
-            /p:Version=$PACKAGE_VERSION \
-            /p:PackageVersion=$PACKAGE_VERSION \
-            /p:IncludeSymbols=true \
-            /p:SymbolPackageFormat=snupkg \
-            /p:ContinuousIntegrationBuild=true
+          dotnet pack $PROJECT_PATH -c Release -o ./artifacts \
+            /p:Version=$PACKAGE_VERSION /p:PackageVersion=$PACKAGE_VERSION
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v4
