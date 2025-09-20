@@ -2,10 +2,8 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <PackageId>UNIR.TFE.Polyrepo.Shared</PackageId>
-    <Authors>Alejandro Junqui</Authors>
-    <PackageDescription>Capa transversal para polyrepos (TFE UNIR)</PackageDescription>
-    <RepositoryUrl>https://github.com/ajunquit/unir-tfe-shared</RepositoryUrl>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
 
 </Project>
