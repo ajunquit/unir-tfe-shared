@@ -57,6 +57,28 @@ jobs:
             --results-directory ./test-results \
             --collect:"XPlat Code Coverage"
 
+      # ---- Resumen de cobertura + HTML como artefacto ----
+      - name: Generate coverage summary
+        uses: danielpalme/ReportGenerator-GitHub-Action@v5
+        with:
+          # Busca los reports generados por el collector
+          reports: 'test-results/**/coverage.cobertura.xml;**/TestResults/**/coverage.cobertura.xml'
+          targetdir: 'coveragereport'
+          reporttypes: 'MarkdownSummary;HtmlInline_AzurePipelines'
+          # (Opcional) Limita al assembly de Shared para evitar mezclar reportes vacíos
+          assemblyfilters: '+UNIR.TFE.Polyrepo.Shared*'
+
+      - name: Add coverage to Job Summary
+        run: |
+          echo "## Code Coverage" >> $GITHUB_STEP_SUMMARY
+          cat coveragereport/Summary.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload coverage HTML
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: coveragereport
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -65,7 +87,7 @@ jobs:
           path: |
             ./test-results
             **/TestResults/**/*.trx
-            **/TestResults/**/*.xml
+            **/TestResults/**/coverage.cobertura.xml
 
       - name: Pack
         run: |
